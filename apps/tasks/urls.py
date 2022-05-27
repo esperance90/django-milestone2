@@ -1,11 +1,12 @@
 from django.urls import path
 
 from apps.tasks.views import AddNewTaskView, TaskListView, TaskItemView, TaskListCurrentUserView, TaskCompletedListView, \
-    TaskCompleteView, TaskAssignView, AddTaskCommentView, ListTaskCommentsView
+    TaskCompleteView, TaskAssignView, AddTaskCommentView, ListTaskCommentsView, TaskSearchListView
 
 urlpatterns = [
     path('', TaskListView.as_view(), name='list_tasks'),
     path('task', AddNewTaskView.as_view(), name='new_task'),
+    path('search', TaskSearchListView.as_view(), name='task_search'),
     path('<int:pk>', TaskItemView.as_view(), name='task_item'),
     path('<int:pk>/complete', TaskCompleteView.as_view(), name='complete_task'),
     path('<int:pk>/assign', TaskAssignView.as_view(), name='assign_task'),

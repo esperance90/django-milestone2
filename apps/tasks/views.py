@@ -1,14 +1,26 @@
 # Create your views here.
+import enum
+from smtplib import SMTPException
+
+from django.conf import settings
+from django.core.mail import send_mail
 from drf_util.decorators import serialize_decorator
 from drf_yasg.utils import swagger_auto_schema, no_body
+from rest_framework import filters
 from rest_framework.generics import get_object_or_404, DestroyAPIView, \
-    UpdateAPIView, ListAPIView, CreateAPIView
+    UpdateAPIView, ListAPIView, CreateAPIView, GenericAPIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from apps.tasks.models import Task, StatusTypes, Comment
 from apps.tasks.serializers import TaskSerializer, TaskIdTittleSerializer, TaskIdSerializer, TaskAllDetailsSerializer, \
     CommentSerializer, TaskUserSerializer, CommentIdSerializer, CommentTextSerializer
+
+
+class NotificationTypes(enum.Enum):
+    TASK_ASSIGN = 1
+    TASK_COMMENT = 2
+    TASK_COMPLETE = 3
 
 
 class AddNewTaskView(CreateAPIView):
@@ -30,6 +42,7 @@ class AddNewTaskView(CreateAPIView):
 
 class AddTaskCommentView(CreateAPIView):
     serializer_class = CommentTextSerializer
+    queryset = Task.objects.all()
 
     @serialize_decorator(CommentTextSerializer)
     def post(self, request, pk):
@@ -40,6 +53,11 @@ class AddTaskCommentView(CreateAPIView):
             task_id=pk
         )
 
+        task = Task.objects.get(pk=pk)
+        current_user = self.request.user
+
+        if task.user_id == current_user.id:
+            send_notification(NotificationTypes.TASK_COMMENT, task)
         return Response(CommentIdSerializer(comment).data)
 
 
@@ -82,16 +100,20 @@ class TaskItemView(ListAPIView, DestroyAPIView):
 
 
 class TaskCompleteView(UpdateAPIView):
+
     @swagger_auto_schema(request_body=no_body)
-    def patch(self, request, *args, **kwargs):
-        task = self.get_object()
+    def patch(self, request, pk):
+        task = get_object_or_404(Task.objects.get(pk=pk))
 
         task.status = StatusTypes.COMPLETED
         task.save(update_fields=['status'])
+
+        send_notification(NotificationTypes.TASK_COMPLETE, task)
+
         return Response({'complete': True})
 
 
-class TaskAssignView(UpdateAPIView):
+class TaskAssignView(GenericAPIView):
     serializer_class = TaskUserSerializer
 
     @serialize_decorator(TaskUserSerializer)
@@ -101,4 +123,34 @@ class TaskAssignView(UpdateAPIView):
         task = Task.objects.get(pk=pk)
         task.user = validated_data['user']
         task.save(update_fields=['user'])
+
+        if task.user_id == self.request.user.id:
+            send_notification(NotificationTypes.TASK_ASSIGN, task)
         return Response({'assigned': True})
+
+
+class TaskSearchListView(ListAPIView):
+    queryset = Task.objects.all()
+    serializer_class = TaskSerializer
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['title']
+
+
+def send_notification(notification_type, task):
+    subject = f'New activity on task: {task.title}!'
+    email_from = settings.EMAIL_HOST_USER
+    recipient_list = [task.user.email, ]
+    msg_generic = f'Hi {task.user.first_name} {task.user.last_name}!'
+
+    if notification_type == NotificationTypes.TASK_ASSIGN:
+        message = f'{msg_generic} Task id:{task.id} was assigned to you!'
+    elif notification_type == NotificationTypes.TASK_COMMENT:
+        message = f'{msg_generic} New comment on task id:{task.id}!'
+    elif notification_type == NotificationTypes.TASK_COMPLETE:
+        message = f'{msg_generic} Task id:{task.id} is completed!'
+    try:
+        send_mail(subject, message, email_from, recipient_list)
+    except SMTPException as e:
+        print('E-mail sending failed', e)
+
+
