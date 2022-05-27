@@ -11,6 +11,7 @@ from rest_framework.generics import get_object_or_404, DestroyAPIView, \
     UpdateAPIView, ListAPIView, CreateAPIView, GenericAPIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.serializers import Serializer
 
 from apps.tasks.models import Task, StatusTypes, Comment
 from apps.tasks.serializers import TaskSerializer, TaskIdTittleSerializer, TaskIdSerializer, TaskAllDetailsSerializer, \
@@ -100,10 +101,12 @@ class TaskItemView(ListAPIView, DestroyAPIView):
 
 
 class TaskCompleteView(UpdateAPIView):
+    serializer_class = Serializer
+    queryset = Task.objects.exclude(status=StatusTypes.COMPLETED)
 
     @swagger_auto_schema(request_body=no_body)
     def patch(self, request, pk):
-        task = get_object_or_404(Task.objects.get(pk=pk))
+        task = self.get_object()
 
         task.status = StatusTypes.COMPLETED
         task.save(update_fields=['status'])
@@ -116,11 +119,15 @@ class TaskCompleteView(UpdateAPIView):
 class TaskAssignView(GenericAPIView):
     serializer_class = TaskUserSerializer
 
+    def get_queryset(self):
+        user = self.request.serializer.validated_data['user']
+        return Task.objects.exclude(user_id=user.id)
+
     @serialize_decorator(TaskUserSerializer)
-    def patch(self, request, pk):
+    def patch(self, request, *args, **kwargs):
         validated_data = request.serializer.validated_data
 
-        task = Task.objects.get(pk=pk)
+        task = self.get_object()
         task.user = validated_data['user']
         task.save(update_fields=['user'])
 
@@ -152,5 +159,3 @@ def send_notification(notification_type, task):
         send_mail(subject, message, email_from, recipient_list)
     except SMTPException as e:
         print('E-mail sending failed', e)
-
-
