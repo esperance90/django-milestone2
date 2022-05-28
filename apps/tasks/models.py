@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.db import models
+from django.db.models import Sum
 from django.utils import timezone
 
 from apps.users.models import CustomUser
@@ -19,7 +20,6 @@ class Task(models.Model):
     title = models.CharField(max_length=200, unique=True)
     description = models.TextField()
     status = models.CharField(max_length=30, choices=StatusTypes.choices, default=StatusTypes.CREATED)
-
 
 class Comment(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE)

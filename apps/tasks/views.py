@@ -1,9 +1,11 @@
 # Create your views here.
 import enum
+from datetime import timedelta
 from smtplib import SMTPException
 
 from django.conf import settings
 from django.core.mail import send_mail
+from django.db.models import Sum
 from django.utils import timezone
 from drf_util.decorators import serialize_decorator
 from drf_yasg.utils import swagger_auto_schema, no_body
@@ -68,8 +70,7 @@ class ListTaskCommentsView(ListAPIView):
     serializer_class = CommentSerializer
 
     def get_queryset(self):
-        task_id = self.kwargs.get('pk', 0)
-        return Comment.objects.filter(task_id=task_id)
+        return Comment.objects.filter(task_id=self.kwargs['pk'])
 
 
 class TaskListView(ListAPIView):
@@ -123,7 +124,7 @@ class TaskAssignView(GenericAPIView):
 
     def get_queryset(self):
         user = self.request.serializer.validated_data['user']
-        return Task.objects.exclude(user_id=user.id)
+        return Task.objects.exclude(user=user)
 
     @serialize_decorator(TaskUserSerializer)
     def patch(self, request, *args, **kwargs):
@@ -157,8 +158,8 @@ class StartTaskView(CreateAPIView):
 
         task_id = self.kwargs['pk']
         # check if the task is owned by current user
-        qs = Task.objects.filter(id=task_id).filter(user_id=self.request.user.id)
-        if not len(qs):
+        tasks_by_current_user = Task.objects.filter(id=task_id).filter(user=self.request.user)
+        if not len(tasks_by_current_user):
             return Response({"created": False, "cause": "Task is not owned by current user!"})
 
         # check that the task cannot be started multiple times without stopping
@@ -178,18 +179,10 @@ class StopTaskView(UpdateAPIView):
     serializer_class = Serializer
     queryset = TimeLog.objects.all()
 
-    # def get_queryset(self):
-    #     task_id=self.kwargs['pk']
-    #     print(task_id)
-    #     qs=TimeLog.objects.filter(task_id=task_id).filter(stop_time__isnull=True).first()
-    #     print(qs)
-    #     return qs
-
     @serialize_decorator(TimeLogStopSerializer)
     @swagger_auto_schema(request_body=no_body)
     def patch(self, request, pk):
         # TODO: add check current user
-        # TODO: ask why is self.getobject() not returning the queryset
         timelog = TimeLog.objects.filter(task_id=pk).filter(stop_time__isnull=True).first()
         if not timelog:
             return Response({"stopped": False, "cause": "Already stopped or not found!"})
@@ -210,8 +203,8 @@ class AddTimelogView(CreateAPIView):
         validated_data = request.serializer.validated_data
 
         task_id = self.kwargs['pk']
-        # check if the task is owned by current user
-        qs = Task.objects.filter(id=task_id).filter(user_id=self.request.user.id)
+        current_user = self.request.user
+        qs = Task.objects.filter(user=current_user).filter(id=task_id).filter(user_id=self.request.user.id)
         if not len(qs):
             return Response({"created": False, "cause": "Task is not owned by current user!"})
 
@@ -219,7 +212,7 @@ class AddTimelogView(CreateAPIView):
         timelog = TimeLog.objects.create(
             start_time=current_time,
             duration=validated_data['duration'] * 60,
-            stop_time=current_time + validated_data['duration'],
+            stop_time=current_time + validated_data['duration']*60,
             task_id=pk
         )
 
@@ -227,11 +220,31 @@ class AddTimelogView(CreateAPIView):
 
 
 class LastMonthTimelogView(ListAPIView):
-    pass
+    serializer_class = TimeLogSerializer
+    queryset = TimeLog.objects.all()
+
+    def get(self, request, *args, **kwargs):
+        current_day = timezone.now().day
+        start_month_datetime = timezone.now() - timedelta(days=current_day)
+        total_time = TimeLog.objects.filter(task__user_id=self.request.user.id).filter(
+            start_time__gt=start_month_datetime) \
+            .aggregate(total_time=Sum('duration'))
+        print(total_time['total_time'])
+        return Response({"total_time": total_time['total_time'].seconds})
 
 
 class LastMonthTopTimelogView(ListAPIView):
-    pass
+    serializer_class = TaskSerializer
+    queryset = Task.objects.all()
+
+    def get(self, request, *args, **kwargs):
+        current_day = timezone.now().day
+        start_month_datetime = timezone.now() - timedelta(days=current_day)
+        tasks = Task.objects.filter(user=self.request.user).filter(
+            timelog__start_time__gt=start_month_datetime) \
+                    .values('id', 'title').annotate(total_time=Sum('timelog__duration')) \
+                    .order_by('total_time')[:20]
+        return Response(tasks)
 
 
 class GetTimelogView(ListAPIView):

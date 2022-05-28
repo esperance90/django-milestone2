@@ -1,3 +1,4 @@
+from django.db.models import Model
 from enumchoicefield import EnumChoiceField
 from rest_framework import serializers
 
@@ -85,3 +86,9 @@ class TimeLogStopSerializer(serializers.ModelSerializer):
     class Meta:
         model = TimeLog
         fields = ["stop_time"]
+
+# class TotalTimeSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Model
+#         # read_only_fields = ("start_time",)
+#         fields = ["total_time"]
