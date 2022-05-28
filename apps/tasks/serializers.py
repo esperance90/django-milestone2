@@ -1,7 +1,7 @@
 from enumchoicefield import EnumChoiceField
 from rest_framework import serializers
 
-from apps.tasks.models import Task, StatusTypes, Comment
+from apps.tasks.models import Task, StatusTypes, Comment, TimeLog
 
 
 class TaskAllDetailsSerializer(serializers.ModelSerializer):
@@ -58,3 +58,30 @@ class CommentTextSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
         fields = ["text", ]
+
+
+class TimeLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TimeLog
+        # read_only_fields = ("start_time",)
+        fields = ["start_time", "stop_time", "duration"]
+
+
+class TimeLogManualSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TimeLog
+        # read_only_fields = ("start_time",)
+        fields = ["start_time", "duration"]
+
+
+class TimeLogStartSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TimeLog
+        read_only_fields = ("task", "start_time",)
+        fields = ["task", "start_time"]
+
+
+class TimeLogStopSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TimeLog
+        fields = ["stop_time"]

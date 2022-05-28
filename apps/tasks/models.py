@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 from django.db import models
+from django.utils import timezone
 
 from apps.users.models import CustomUser
 
@@ -21,3 +24,10 @@ class Task(models.Model):
 class Comment(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE)
     text = models.TextField()
+
+
+class TimeLog(models.Model):
+    task = models.ForeignKey(Task, on_delete=models.CASCADE)
+    start_time = models.DateTimeField(default=timezone.now)
+    stop_time = models.DateTimeField(blank=True, null=True)
+    duration = models.DurationField(default=timedelta())
