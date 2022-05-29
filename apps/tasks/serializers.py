@@ -64,14 +64,12 @@ class CommentTextSerializer(serializers.ModelSerializer):
 class TimeLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = TimeLog
-        # read_only_fields = ("start_time",)
         fields = ["start_time", "stop_time", "duration"]
 
 
 class TimeLogManualSerializer(serializers.ModelSerializer):
     class Meta:
         model = TimeLog
-        # read_only_fields = ("start_time",)
         fields = ["start_time", "duration"]
 
 

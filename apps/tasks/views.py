@@ -77,6 +77,14 @@ class TaskListView(ListAPIView):
     serializer_class = TaskIdTittleSerializer
     queryset = Task.objects.all()
 
+    def get(self, request, *args, **kwargs):
+        start_month_datetime = get_start_month_datetime()
+
+        tasks = Task.objects.filter(
+            timelog__start_time__gt=start_month_datetime) \
+            .values('id', 'title').annotate(total_time=Sum('timelog__duration'))
+        return Response(tasks)
+
 
 class TaskCompletedListView(ListAPIView):
     serializer_class = TaskIdTittleSerializer
@@ -212,7 +220,7 @@ class AddTimelogView(CreateAPIView):
         timelog = TimeLog.objects.create(
             start_time=current_time,
             duration=validated_data['duration'] * 60,
-            stop_time=current_time + validated_data['duration']*60,
+            stop_time=current_time + validated_data['duration'] * 60,
             task_id=pk
         )
 
@@ -224,8 +232,7 @@ class LastMonthTimelogView(ListAPIView):
     queryset = TimeLog.objects.all()
 
     def get(self, request, *args, **kwargs):
-        current_day = timezone.now().day
-        start_month_datetime = timezone.now() - timedelta(days=current_day)
+        start_month_datetime = get_start_month_datetime()
         total_time = TimeLog.objects.filter(task__user_id=self.request.user.id).filter(
             start_time__gt=start_month_datetime) \
             .aggregate(total_time=Sum('duration'))
@@ -238,12 +245,11 @@ class LastMonthTopTimelogView(ListAPIView):
     queryset = Task.objects.all()
 
     def get(self, request, *args, **kwargs):
-        current_day = timezone.now().day
-        start_month_datetime = timezone.now() - timedelta(days=current_day)
+        start_month_datetime = get_start_month_datetime()
         tasks = Task.objects.filter(user=self.request.user).filter(
             timelog__start_time__gt=start_month_datetime) \
-                    .values('id', 'title').annotate(total_time=Sum('timelog__duration')) \
-                    .order_by('total_time')[:20]
+            .values('id', 'title').annotate(total_time=Sum('timelog__duration')) \
+            .order_by('total_time')[:20]
         return Response(tasks)
 
 
@@ -259,15 +265,21 @@ def send_notification(notification_type, task):
     subject = f'New activity on task: {task.title}!'
     email_from = settings.EMAIL_HOST_USER
     recipient_list = [task.user.email, ]
-    msg_generic = f'Hi {task.user.first_name} {task.user.last_name}!'
+    message = f'Hi {task.user.first_name} {task.user.last_name}!'
 
     if notification_type == NotificationTypes.TASK_ASSIGN:
-        message = f'{msg_generic} Task id:{task.id} was assigned to you!'
+        message = f'{message} Task id:{task.id} was assigned to you!'
     elif notification_type == NotificationTypes.TASK_COMMENT:
-        message = f'{msg_generic} New comment on task id:{task.id}!'
+        message = f'{message} New comment on task id:{task.id}!'
     elif notification_type == NotificationTypes.TASK_COMPLETE:
-        message = f'{msg_generic} Task id:{task.id} is completed!'
+        message = f'{message} Task id:{task.id} is completed!'
     try:
         send_mail(subject, message, email_from, recipient_list)
     except SMTPException as e:
         print('E-mail sending failed', e)
+
+
+def get_start_month_datetime():
+    current_day = timezone.now().day
+    start_month_datetime = timezone.now() - timedelta(days=current_day)
+    return start_month_datetime
