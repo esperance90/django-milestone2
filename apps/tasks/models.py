@@ -21,6 +21,7 @@ class Task(models.Model):
     description = models.TextField()
     status = models.CharField(max_length=30, choices=StatusTypes.choices, default=StatusTypes.CREATED)
 
+
 class Comment(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE)
     text = models.TextField()

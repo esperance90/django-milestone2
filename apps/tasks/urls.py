@@ -19,6 +19,6 @@ urlpatterns = [
     path('timelog/last-month', LastMonthTimelogView.as_view(), name='get_last_month_timelog'),
     path('timelog/top20', LastMonthTopTimelogView.as_view(), name='get_top_last_month_timelog'),
     path('<int:pk>/timelog/all', GetTimelogView.as_view(), name='get_timelog'),
-    path('current-user', TaskListCurrentUserView.as_view(), name='show_tasks'),
+    path('current-user', TaskListCurrentUserView.as_view(), name='show_my_tasks'),
     path('completed', TaskCompletedListView.as_view(), name='get_completed_tasks'),
 ]

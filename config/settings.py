@@ -111,6 +111,12 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+    },
+    'TEST': {
+        # testing database customization here
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': 'test.sqlite3',
+        # some other customization, for example the user user, password, etc
     }
 }
 
@@ -159,3 +165,10 @@ EMAIL_USE_TLS = True
 EMAIL_PORT = 587
 EMAIL_HOST_USER = 'nadiatest154@gmail.com'
 EMAIL_HOST_PASSWORD = 'nadiatest'
+
+TEST_RUNNER = 'django_nose.NoseTestSuiteRunner'
+
+NOSE_ARGS = [
+    '--with-coverage',
+    '--cover-package=' + ','.join([app + '.views' for app in INSTALLED_APPS if app.startswith('apps.')]),
+]
