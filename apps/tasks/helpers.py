@@ -1,10 +1,13 @@
 import enum
 from datetime import timedelta
+from itertools import count
 from smtplib import SMTPException
 
 from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
+
+from apps.tasks.models import TimeLog, Comment, Task, StatusTypes
 
 
 def send_notification(notification_type, task):
@@ -37,3 +40,55 @@ class NotificationTypes(enum.Enum):
     TASK_ASSIGN = 1
     TASK_COMMENT = 2
     TASK_COMPLETE = 3
+
+
+task_id = count(start=1)
+comment_id = count(start=1)
+timelog_id = count(start=1)
+
+
+def get_id(entity_id):
+    return next(entity_id)
+
+
+def get_task(user, status):
+    new_id = get_id(task_id)
+    task = Task.objects.create(id=new_id,
+                               user=user,
+                               title="New title" + str(new_id),
+                               description="New description" + str(new_id),
+                               status=status)
+    return task
+
+
+def get_new_task(user):
+    new_id = get_id(task_id)
+    task = Task.objects.create(id=new_id,
+                               user=user,
+                               title="New title" + str(new_id),
+                               description="New description" + str(new_id),
+                               status=StatusTypes.CREATED)
+    return task
+
+
+def get_new_comment(task):
+    new_id = get_id(comment_id)
+    comment = Comment.objects.create(id=new_id,
+                                     text="dummy comment" + str(new_id),
+                                     task=task)
+    return comment
+
+
+def get_new_timelog(task, start_time):
+    new_id = get_id(timelog_id)
+    timelog = TimeLog.objects.create(id=new_id, task=task, start_time=start_time)
+    return timelog
+
+
+def get_timelog(task, start_time, duration):
+    new_id = get_id(timelog_id)
+    stop_time = start_time + timedelta(minutes=duration)
+    timelog = TimeLog.objects.create(id=new_id, task=task, start_time=start_time,
+                                     duration=timedelta(minutes=duration),
+                                     stop_time=stop_time)
+    return timelog
