@@ -1,8 +1,6 @@
 from django.core.management.base import BaseCommand
 
 from apps.tasks.models import Task
-from apps.tasks.tests import generate_random_timelog
-
 
 class Command(BaseCommand):
     help = 'Create random timelog'
