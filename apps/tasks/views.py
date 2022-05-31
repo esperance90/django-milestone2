@@ -1,10 +1,4 @@
 # Create your views here.
-import enum
-from datetime import timedelta
-from smtplib import SMTPException
-
-from django.conf import settings
-from django.core.mail import send_mail
 from django.db.models import Sum
 from django.utils import timezone
 from drf_util.decorators import serialize_decorator
@@ -16,16 +10,11 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.serializers import Serializer
 
+from apps.tasks.helpers import get_start_month_datetime, send_notification, NotificationTypes
 from apps.tasks.models import Task, StatusTypes, Comment, TimeLog
 from apps.tasks.serializers import TaskSerializer, TaskIdTittleSerializer, TaskIdSerializer, TaskAllDetailsSerializer, \
     CommentSerializer, TaskUserSerializer, CommentIdSerializer, CommentTextSerializer, TimeLogSerializer, \
     TimeLogStartSerializer, TimeLogManualSerializer, TimeLogStopSerializer
-
-
-class NotificationTypes(enum.Enum):
-    TASK_ASSIGN = 1
-    TASK_COMMENT = 2
-    TASK_COMPLETE = 3
 
 
 class AddNewTaskView(CreateAPIView):
@@ -158,7 +147,7 @@ class StartTaskView(CreateAPIView):
     serializer_class = Serializer
 
     def get_queryset(self):
-        return TimeLog.objects.filter(task_id=self.kwargs['pk']).filter(stop_time__isnull=True)
+        return TimeLog.objects.filter(task_id=self.kwargs['pk'], stop_time__isnull=True)
 
     @serialize_decorator(TimeLogStartSerializer)
     @swagger_auto_schema(request_body=no_body)
@@ -166,8 +155,8 @@ class StartTaskView(CreateAPIView):
 
         task_id = self.kwargs['pk']
         # check if the task is owned by current user
-        tasks_by_current_user = Task.objects.filter(id=task_id).filter(user=self.request.user)
-        if not len(tasks_by_current_user):
+        tasks_by_current_user = Task.objects.filter(id=task_id, user=self.request.user)
+        if not tasks_by_current_user.exists():
             return Response({"created": False, "cause": "Task is not owned by current user!"})
 
         # check that the task cannot be started multiple times without stopping
@@ -190,8 +179,8 @@ class StopTaskView(UpdateAPIView):
     @serialize_decorator(TimeLogStopSerializer)
     @swagger_auto_schema(request_body=no_body)
     def patch(self, request, pk):
-        # TODO: add check current user
-        timelog = TimeLog.objects.filter(task_id=pk).filter(stop_time__isnull=True).first()
+        timelog = TimeLog.objects.filter(task__user_id=self.request.user, task_id=pk,
+                                         stop_time__isnull=True).first()
         if not timelog:
             return Response({"stopped": False, "cause": "Already stopped or not found!"})
 
@@ -210,10 +199,10 @@ class AddTimelogView(CreateAPIView):
     def post(self, request, pk):
         validated_data = request.serializer.validated_data
 
-        task_id = self.kwargs['pk']
+        task = self.kwargs['pk']
         current_user = self.request.user
-        qs = Task.objects.filter(user=current_user).filter(id=task_id).filter(user_id=self.request.user.id)
-        if not len(qs):
+        qs = Task.objects.filter(user=current_user, id=task, user_id=self.request.user.id)
+        if not qs.exists():
             return Response({"created": False, "cause": "Task is not owned by current user!"})
 
         current_time = timezone.now()
@@ -233,10 +222,8 @@ class LastMonthTimelogView(ListAPIView):
 
     def get(self, request, *args, **kwargs):
         start_month_datetime = get_start_month_datetime()
-        total_time = TimeLog.objects.filter(task__user_id=self.request.user.id).filter(
-            start_time__gt=start_month_datetime) \
+        total_time = TimeLog.objects.filter(task__user_id=self.request.user.id, start_time__gt=start_month_datetime) \
             .aggregate(total_time=Sum('duration'))
-        print(total_time['total_time'])
         return Response({"total_time": total_time['total_time'].seconds})
 
 
@@ -246,10 +233,9 @@ class LastMonthTopTimelogView(ListAPIView):
 
     def get(self, request, *args, **kwargs):
         start_month_datetime = get_start_month_datetime()
-        tasks = Task.objects.filter(user=self.request.user).filter(
-            timelog__start_time__gt=start_month_datetime) \
-            .values('id', 'title').annotate(total_time=Sum('timelog__duration')) \
-            .order_by('total_time')[:20]
+        tasks = Task.objects.filter(user=self.request.user, timelog__start_time__gt=start_month_datetime) \
+                    .values('id', 'title').annotate(total_time=Sum('timelog__duration')) \
+                    .order_by('-total_time')[:20]
         return Response(tasks)
 
 
@@ -259,27 +245,3 @@ class GetTimelogView(ListAPIView):
     def get_queryset(self):
         task_id = self.kwargs.get('pk', 0)
         return TimeLog.objects.filter(task_id=task_id)
-
-
-def send_notification(notification_type, task):
-    subject = f'New activity on task: {task.title}!'
-    email_from = settings.EMAIL_HOST_USER
-    recipient_list = [task.user.email, ]
-    message = f'Hi {task.user.first_name} {task.user.last_name}!'
-
-    if notification_type == NotificationTypes.TASK_ASSIGN:
-        message = f'{message} Task id:{task.id} was assigned to you!'
-    elif notification_type == NotificationTypes.TASK_COMMENT:
-        message = f'{message} New comment on task id:{task.id}!'
-    elif notification_type == NotificationTypes.TASK_COMPLETE:
-        message = f'{message} Task id:{task.id} is completed!'
-    try:
-        send_mail(subject, message, email_from, recipient_list)
-    except SMTPException as e:
-        print('E-mail sending failed', e)
-
-
-def get_start_month_datetime():
-    current_day = timezone.now().day
-    start_month_datetime = timezone.now() - timedelta(days=current_day)
-    return start_month_datetime

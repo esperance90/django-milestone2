@@ -20,26 +20,6 @@
       "is_superuser": false,
       "is_staff": false
     }
-  },
-  {
-    "model": "tasks.task",
-    "pk": 1,
-    "fields": {
-      "user": 1,
-      "title": "Dummy task",
-      "description": "dummy desc",
-      "status": "CREATED"
-    }
-  },
-    {
-    "model": "tasks.task",
-    "pk": 3,
-    "fields": {
-      "user": 1,
-      "title": "Third task",
-      "description": "third task desc",
-      "status": "COMPLETED"
-    }
   }
 ]
 
