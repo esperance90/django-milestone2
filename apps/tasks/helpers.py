@@ -97,6 +97,6 @@ def get_timelog(task, start_time, duration):
 
 def generate_random_timelog(task):
     random_duration = randrange(1, 10) * 60
-    random_start = timezone.now() - timedelta(randrange(1, 7))
+    random_start = timezone.now() - timedelta(randrange(0, 7))
     return get_timelog(task, random_start, random_duration)
 

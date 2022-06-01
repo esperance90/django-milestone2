@@ -1,6 +1,8 @@
 # Create your views here.
 from django.db.models import Sum
 from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 from drf_util.decorators import serialize_decorator
 from drf_yasg.utils import swagger_auto_schema, no_body
 from rest_framework import filters
@@ -15,6 +17,7 @@ from apps.tasks.models import Task, StatusTypes, Comment, TimeLog
 from apps.tasks.serializers import TaskSerializer, TaskIdTittleSerializer, TaskIdSerializer, TaskAllDetailsSerializer, \
     CommentSerializer, TaskUserSerializer, CommentIdSerializer, CommentTextSerializer, TimeLogSerializer, \
     TimeLogStartSerializer, TimeLogManualSerializer, TimeLogStopSerializer
+from config.settings import CACHE_TTL
 
 
 class AddNewTaskView(CreateAPIView):
@@ -224,13 +227,20 @@ class LastMonthTimelogView(ListAPIView):
         start_month_datetime = get_start_month_datetime()
         total_time = TimeLog.objects.filter(task__user_id=self.request.user.id, start_time__gt=start_month_datetime) \
             .aggregate(total_time=Sum('duration'))
-        return Response({"total_time": total_time['total_time'].seconds})
+
+        if total_time['total_time'] is None:
+            total_time = 0
+        else:
+            total_time = total_time['total_time'].seconds
+
+        return Response({"total_time": total_time})
 
 
 class LastMonthTopTimelogView(ListAPIView):
     serializer_class = TaskSerializer
     queryset = Task.objects.all()
 
+    @method_decorator(cache_page(CACHE_TTL))
     def get(self, request, *args, **kwargs):
         start_month_datetime = get_start_month_datetime()
         tasks = Task.objects.filter(user=self.request.user, timelog__start_time__gt=start_month_datetime) \
